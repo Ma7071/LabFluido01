@@ -398,3 +398,51 @@ polar_path = os.path.join(polar_dir, 'cl_vs_cd_polar.png')
 plt.savefig(polar_path, dpi=300, bbox_inches='tight')
 print(f"Saved Cl vs. Cd polar plot: {polar_path}")
 plt.close()
+
+
+# === PART 4: Super-Interpolated Cl and Cd vs Alpha + Polar ===
+
+
+
+# Sort alpha and Cl/Cd data
+alpha_cl = sorted(cl_values.items())
+alpha_cd = sorted(zip(alpha_list, CD_list))
+
+alpha_cl_arr = np.array([a for a, _ in alpha_cl])
+cl_arr = np.array([cl for _, cl in alpha_cl])
+
+alpha_cd_arr = np.array([a for a, _ in alpha_cd])
+cd_arr = np.array([cd for _, cd in alpha_cd])
+
+# Interpolate Cl and Cd vs alpha
+cl_interp = CubicSpline(alpha_cl_arr, cl_arr)
+cd_interp = CubicSpline(alpha_cd_arr, cd_arr)
+
+# Define common fine alpha range for super interpolation
+alpha_fine = np.linspace(
+    max(min(alpha_cl_arr.min(), alpha_cd_arr.min()), -8),
+    min(max(alpha_cl_arr.max(), alpha_cd_arr.max()), 10),
+    2000
+)
+cl_fine = cl_interp(alpha_fine)
+cd_fine = cd_interp(alpha_fine)
+
+
+# Plot super-interpolated Cl vs Cd polar curve
+plt.figure(figsize=(8, 6))
+plt.plot(cd_fine, cl_fine, '-', label='Super-Interpolated Polar')
+plt.xlabel("Coefficient of Drag (Cd)")
+plt.ylabel("Coefficient of Lift (Cl)")
+plt.title("Super-Interpolated Polar Curve: Cl vs. Cd")
+plt.grid(True)
+plt.legend()
+# Create a new directory for super-interpolated plots
+super_polar_dir = "super_interpolated_plots"
+if not os.path.exists(super_polar_dir):
+    os.makedirs(super_polar_dir)
+
+super_polar_dir = os.path.join(super_polar_dir, 'cl_vs_cd_polar_super_inter.png')
+plt.savefig(super_polar_dir, dpi=300, bbox_inches='tight')
+plt.close()
+
+print("Super-interpolated plotsaved ")
