@@ -446,3 +446,53 @@ plt.savefig(super_polar_dir, dpi=300, bbox_inches='tight')
 plt.close()
 
 print("Super-interpolated plotsaved ")
+# === PART 4b: Quadratic Fit Cl vs Cd Polar ===
+
+# Sort Cl and Cd data by alpha
+alpha_cl = sorted(cl_values.items())          # List of (alpha, Cl)
+alpha_cd = sorted(zip(alpha_list, CD_list))   # List of (alpha, Cd)
+
+# Extract alpha values sets
+alphas_cl = set(a for a, _ in alpha_cl)
+alphas_cd = set(a for a, _ in alpha_cd)
+
+# Find common alpha values present in both
+common_alphas = sorted(alphas_cl.intersection(alphas_cd))
+
+# Convert dict-like data to lookup dicts
+cl_dict = dict(alpha_cl)
+cd_dict = dict(alpha_cd)
+
+# Extract Cl and Cd for common alphas
+cl_common = np.array([cl_dict[a] for a in common_alphas])
+cd_common = np.array([cd_dict[a] for a in common_alphas])
+
+print(f"Number of common angles: {len(common_alphas)}")
+
+# Fit quadratic polynomial: Cd = f(Cl)
+coeffs = np.polyfit(cl_common, cd_common, deg=2)
+cd_quad_fit = np.poly1d(coeffs)
+
+# Generate Cl range for fit curve plotting
+cl_fit_range = np.linspace(min(cl_common), max(cl_common), 1000)
+cd_fit_vals = cd_quad_fit(cl_fit_range)
+
+# Plot raw data and quadratic fit
+plt.figure(figsize=(8, 6))
+plt.plot(cd_common, cl_common, 'o', label='Raw Data', alpha=0.5)
+plt.plot(cd_fit_vals, cl_fit_range, '-', label='Quadratic Fit (2nd Order)', color='red')
+plt.xlabel("Coefficient of Drag (Cd)")
+plt.ylabel("Coefficient of Lift (Cl)")
+plt.title("Quadratic Fit Polar Curve: Cl vs. Cd")
+plt.grid(True)
+plt.legend()
+
+# Save plot
+output_dir = "super_interpolated_plots"
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+plot_path = os.path.join(output_dir, 'cl_vs_cd_polar_quadratic_fit.png')
+plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+plt.close()
+
+print("Quadratic-fit plot saved")
