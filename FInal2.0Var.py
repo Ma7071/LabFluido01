@@ -496,3 +496,68 @@ plt.savefig(plot_path, dpi=300, bbox_inches='tight')
 plt.close()
 
 print("Quadratic-fit plot saved")
+
+
+
+# === Xfoil ===
+filename = 'rawdata_03.txt'
+output_dir = 'xfoil_plots'
+
+# === Make sure output directory exists ===
+os.makedirs(output_dir, exist_ok=True)
+
+# === Read data manually ===
+alpha_list = []
+cl_list = []
+cd_list = []
+
+with open(filename, 'r') as f:
+    for line in f:
+        # Skip header or empty lines
+        if line.strip() == '' or line.strip().startswith('alpha'):
+            continue
+        parts = line.strip().split()
+        if len(parts) >= 3:
+            try:
+                alpha_list.append(float(parts[0]))
+                cl_list.append(float(parts[1]))
+                cd_list.append(float(parts[2]))
+            except ValueError:
+                continue  # skip bad lines
+
+# Convert to numpy arrays
+alpha = np.array(alpha_list)
+cl = np.array(cl_list)
+cd = np.array(cd_list)
+
+# === Plot CL vs Alpha ===
+plt.figure(figsize=(8, 6))
+plt.plot(alpha, cl, marker='o')
+plt.title('CL vs. Alpha')
+plt.xlabel('Alpha (deg)')
+plt.ylabel('CL')
+plt.grid(True)
+plt.savefig(os.path.join(output_dir, 'xfoil_cl_alpha.png'), dpi=300, bbox_inches='tight')
+plt.close()
+
+# === Plot CD vs Alpha ===
+plt.figure(figsize=(8, 6))
+plt.plot(alpha, cd, marker='o', color='orange')
+plt.title('CD vs. Alpha')
+plt.xlabel('Alpha (deg)')
+plt.ylabel('CD')
+plt.grid(True)
+plt.savefig(os.path.join(output_dir, 'xfoil_cd_alpha.png'), dpi=300, bbox_inches='tight')
+plt.close()
+
+# === Polar Plot: CL vs CD ===
+plt.figure(figsize=(8, 6))
+plt.plot(cd, cl, marker='o', color='green')
+plt.title('Polar Curve: CL vs. CD')
+plt.xlabel('CD')
+plt.ylabel('CL')
+plt.grid(True)
+plt.savefig(os.path.join(output_dir, 'xfoil_polar.png'), dpi=300, bbox_inches='tight')
+plt.close()
+
+print("Saved all plots to output_dir")
