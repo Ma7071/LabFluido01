@@ -330,8 +330,14 @@ ax2.set_title("Drag Coefficient vs Angle of Attack")
 ax2.legend()
 ax2.grid(True)
 
-plt.tight_layout()
-plt.show()
+cd_alfa_dir = "cd_alfa_plots"
+if not os.path.exists(cd_alfa_dir):
+    os.makedirs(cd_alfa_dir)
+
+cd_alfa_interp_plot_path = os.path.join(cd_alfa_dir, 'cd_vs_alpha^2_regression.png')
+plt.savefig(cd_alfa_interp_plot_path, dpi=300, bbox_inches='tight')
+print(f"Saved CD vs. Angle Regression plot: {cd_alfa_interp_plot_path}")
+plt.close()
 
 # Save drag polar data and coefficients
 os.makedirs(output_directory, exist_ok=True)
@@ -352,3 +358,43 @@ with open(coeff_path, 'w') as f:
     f.write(f'k₁:   {k1:.6f}\n')
     f.write(f'k₂:   {k2:.6f}\n')
 print(f"Saved drag polar coefficients → {coeff_path}")
+
+
+# === PART 3: Cl vs Cd Plot ===
+
+
+# Ensure Cl and Cd data are aligned by angle of attack
+cl_cd_data = []
+for alpha_cd, cd in zip(alpha_list, CD_list):
+    if alpha_cd in cl_values:
+        cl = cl_values[alpha_cd]
+        cl_cd_data.append((cl, cd))
+
+# Sort by Cl for smooth plotting
+cl_cd_data = sorted(cl_cd_data, key=lambda x: x[0])
+cl_arr_plot = np.array([c[0] for c in cl_cd_data])
+cd_arr_plot = np.array([c[1] for c in cl_cd_data])
+
+# Fit spline for smooth polar curve
+cs_cl_cd = CubicSpline(cl_arr_plot, cd_arr_plot)
+cl_fine = np.linspace(cl_arr_plot.min(), cl_arr_plot.max(), 1000)
+cd_fine = cs_cl_cd(cl_fine)
+
+# Plot Cl vs Cd
+plt.figure(figsize=(8, 6))
+plt.plot(cd_arr_plot, cl_arr_plot, 'o', label='Original Data')
+plt.plot(cd_fine, cl_fine, '-', label='Interpolated Curve')
+plt.xlabel("Coefficient of Drag (Cd)")
+plt.ylabel("Coefficient of Lift (Cl)")
+plt.title("Polar Curve: Cl vs. Cd")
+plt.grid(True)
+plt.legend()
+
+polar_dir = "polar_plot"
+if not os.path.exists(polar_dir):
+    os.makedirs(polar_dir)
+
+polar_path = os.path.join(polar_dir, 'cl_vs_cd_polar.png')
+plt.savefig(polar_path, dpi=300, bbox_inches='tight')
+print(f"Saved Cl vs. Cd polar plot: {polar_path}")
+plt.close()
