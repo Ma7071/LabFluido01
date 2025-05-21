@@ -110,9 +110,9 @@ for angle in sorted(pressure_data_all.keys()):
 
     cp_convergence = (cp_up_sensor[-1] + cp_low_sensor[-1]) / 2.0
 
-    new_x_upper = np.append(x_upper, 1.15)
+    new_x_upper = np.append(x_upper, 1.00)
     new_cp_upper = np.append(cp_up_sensor, cp_convergence)
-    new_x_lower = np.append(x_lower, 1.15)
+    new_x_lower = np.append(x_lower, 1.00)
     new_cp_lower = np.append(cp_low_sensor, cp_convergence)
 
     cs_upper = CubicSpline(new_x_upper, new_cp_upper, extrapolate=True)
