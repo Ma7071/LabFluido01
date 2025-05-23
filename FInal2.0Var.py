@@ -561,3 +561,78 @@ plt.savefig(os.path.join(output_dir, 'xfoil_polar.png'), dpi=300, bbox_inches='t
 plt.close()
 
 print("Saved all plots to output_dir")
+
+
+# === PART 5: EXPERIMENT vs XFOIL COMPARISON PLOTS ===
+
+from scipy.interpolate import interp1d
+
+# — assume these already exist in your script —
+#   alpha_array, cl_arr, CD_array   ← your experimental sweep arrays
+#   alpha (xfoil), cl (xfoil), cd (xfoil)  ← loaded from rawdata_03.txt
+
+# 1) Build unified experimental vectors
+alpha_exp_all = np.array(sorted(cl_values.keys()))            # experimental angles
+cl_exp_all    = np.array([cl_values[a] for a in alpha_exp_all])
+# create a CD interpolator on your experimental data
+cd_exp_interp = interp1d(alpha_array, CD_array,
+                         kind='linear',
+                         bounds_error=False,
+                         fill_value="extrapolate")
+cd_exp_all    = cd_exp_interp(alpha_exp_all)
+
+# 2) Restrict to the overlap between experiment and XFOIL
+alpha_min = max(alpha_exp_all.min(), alpha.min())
+alpha_max = min(alpha_exp_all.max(), alpha.max())
+
+mask_exp  = (alpha_exp_all >= alpha_min) & (alpha_exp_all <= alpha_max)
+mask_xf   = (alpha       >= alpha_min) & (alpha       <= alpha_max)
+
+alpha_e = alpha_exp_all[mask_exp]
+cl_e    = cl_exp_all[mask_exp]
+cd_e    = cd_exp_all[mask_exp]
+
+alpha_xf = alpha[mask_xf]
+cl_xf    = cl[mask_xf]
+cd_xf    = cd[mask_xf]
+
+# 3) Make combined directory
+out_dir = "combined_plots"
+os.makedirs(out_dir, exist_ok=True)
+
+# 4) Plot comparisons
+fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+# --- CL vs α ---
+axes[0].plot(alpha_e, cl_e, '-', label='Experiment')
+axes[0].plot(alpha_xf, cl_xf, '--', label='XFOIL')
+axes[0].set_xlabel("α (deg)")
+axes[0].set_ylabel("C_L")
+axes[0].set_title("C_L vs α")
+axes[0].legend()
+axes[0].grid(True)
+
+# --- CD vs α ---
+axes[1].plot(alpha_e, cd_e, '-', label='Experiment')
+axes[1].plot(alpha_xf, cd_xf, '--', label='XFOIL')
+axes[1].set_xlabel("α (deg)")
+axes[1].set_ylabel("C_D")
+axes[1].set_title("C_D vs α")
+axes[1].legend()
+axes[1].grid(True)
+
+# --- Polar: C_L vs C_D ---
+axes[2].plot(cd_e, cl_e, '-', label='Experiment')
+axes[2].plot(cd_xf, cl_xf, '--', label='XFOIL')
+axes[2].set_xlabel("C_D")
+axes[2].set_ylabel("C_L")
+axes[2].set_title("Polar Curve: C_L vs C_D")
+axes[2].legend()
+axes[2].grid(True)
+
+plt.tight_layout()
+save_path = os.path.join(out_dir, "comparison_exp_xfoil.png")
+plt.savefig(save_path, dpi=300, bbox_inches='tight')
+plt.close()
+
+print(f"Saved combined comparison plot → {save_path}")
