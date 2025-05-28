@@ -257,8 +257,7 @@ for fname in os.listdir(data_dir):
     q_inf_all   = data[:, 1]
     q_loc_all   = data[:, 2]
 
-    # 3) Determine a single freestream dynamic pressure q∞
-    q_inf = q_inf_all.mean()   # scalar Pa
+    #
 
     # 4) Average q_loc at each unique z
     unique_z   = np.unique(z_mm)
@@ -266,8 +265,11 @@ for fname in os.listdir(data_dir):
                            for z in unique_z])
     z_m        = unique_z / 1000.0  # to meters
 
+   # Use the maximum measured dynamic pressure in the wake as q_infinity
+    q_inf = np.max(q_loc_all)
+
     # 5) Build the wake-deficit integrand: Δq(z) = q∞ – q(z)
-    integrand = q_inf - avg_q_loc   # [Pa]
+    integrand = np.sqrt(avg_q_loc/q_inf)-(avg_q_loc/q_inf)   # [Pa]
 
     # 6) Integrate Δq over z to get momentum deficit (Pa·m)
     momentum_deficit = np.trapz(integrand, z_m)
@@ -276,7 +278,7 @@ for fname in os.listdir(data_dir):
     D_prime = 2.0 * momentum_deficit
 
     # 8) 2D drag coefficient: C_D = D' / (q∞·c)
-    CD = D_prime / (q_inf * d)
+    CD = D_prime / ( d)
 
     CD_list.append(CD)
 
@@ -420,7 +422,7 @@ cd_interp = CubicSpline(alpha_cd_arr, cd_arr)
 
 # Define common fine alpha range for super interpolation
 alpha_fine = np.linspace(
-    max(min(alpha_cl_arr.min(), alpha_cd_arr.min()), -8),
+    max(min(alpha_cl_arr.min(), alpha_cd_arr.min()), -4),
     min(max(alpha_cl_arr.max(), alpha_cd_arr.max()), 10),
     2000
 )
