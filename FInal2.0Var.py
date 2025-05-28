@@ -567,7 +567,6 @@ print("Saved all plots to output_dir")
 
 # === PART 5: EXPERIMENT vs XFOIL COMPARISON PLOTS ===
 
-from scipy.interpolate import interp1d
 
 # — assume these already exist in your script —
 #   alpha_array, cl_arr, CD_array   ← your experimental sweep arrays
@@ -576,12 +575,12 @@ from scipy.interpolate import interp1d
 # 1) Build unified experimental vectors
 alpha_exp_all = np.array(sorted(cl_values.keys()))            # experimental angles
 cl_exp_all    = np.array([cl_values[a] for a in alpha_exp_all])
-# create a CD interpolator on your experimental data
-cd_exp_interp = interp1d(alpha_array, CD_array,
-                         kind='linear',
-                         bounds_error=False,
-                         fill_value="extrapolate")
-cd_exp_all    = cd_exp_interp(alpha_exp_all)
+# Fit a second-degree polynomial to experimental CD vs alpha
+cd_coeffs = np.polyfit(alpha_array, CD_array, deg=2)
+
+# Evaluate polynomial at all desired alpha points
+cd_exp_all = np.polyval(cd_coeffs, alpha_exp_all)
+
 
 # 2) Restrict to the overlap between experiment and XFOIL
 alpha_min = max(alpha_exp_all.min(), alpha.min())
