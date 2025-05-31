@@ -197,6 +197,40 @@ for angle in sorted(pressure_data_all.keys()):
     print(f"Saved Cp distribution plot: {cp_plot_path}")
     plt.close()
 
+# ---- Plot Cp distributions for selected angles only ----
+selected_angles = [-6, -4, 0, 4, 8]  # ← Customize this list as needed
+
+
+plt.figure(figsize=(10, 6))
+x_common = np.linspace(0, 1, 1000)
+
+for angle in selected_angles:
+    if angle not in pressure_interpolators:
+        print(f"Warning: Angle {angle}° not found in pressure_interpolators.")
+        continue
+
+    cs_upper = pressure_interpolators[angle]["upper"]
+    cs_lower = pressure_interpolators[angle]["lower"]
+
+    cp_upper = cs_upper(x_common)
+    cp_lower = cs_lower(x_common)
+
+    plt.plot(x_common, cp_upper, '--', label=f'Upper Cp - {angle:.1f}°')
+    plt.plot(x_common, cp_lower, '-', label=f'Lower Cp - {angle:.1f}°')
+
+plt.xlabel("x/c")
+plt.ylabel("Coefficient of Pressure (Cp)")
+plt.title("Cp Distributions for Selected Angles of Attack")
+plt.gca().invert_yaxis()
+plt.grid(True)
+plt.legend(ncol=2, fontsize=9)
+
+multi_cp_plot_path = os.path.join(cp_directory, 'cp_selected_angles_comparison.png')
+plt.savefig(multi_cp_plot_path, dpi=300, bbox_inches='tight')
+print(f"Saved selected-angles Cp plot: {multi_cp_plot_path}")
+plt.close()
+
+
 # ---- Create a Cl vs. Angle (α) plot ----
 angles = np.array(sorted(cl_values.keys()))
 cl_arr = np.array([cl_values[a] for a in angles])
