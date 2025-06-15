@@ -1,10 +1,8 @@
-
 #!/usr/bin/env python3
 import os, glob, pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.interpolate import CubicSpline
-from scipy.interpolate import UnivariateSpline
+from scipy.interpolate import CubicSpline, UnivariateSpline
 from scipy import integrate
 
 # === 0) Constants ===
@@ -13,23 +11,31 @@ FREESTREAM_VELOCITY = 20.0   # m/s
 AIR_DENSITY        = 1.174   # kg/m³
 CHORD              = 0.1     # m
 
-# === 1) Setup Results directories ===
+# === 1) Original Results directories ===
 RESULTS      = "Results"
-DIR_AIRFOIL  = os.path.join(RESULTS, "airfoil_plots")
-DIR_INTERPOL = os.path.join(RESULTS, "interpolated_plots")
-DIR_CP       = os.path.join(RESULTS, "cp_plots")
-DIR_CL_ALPHA = os.path.join(RESULTS, "cl_alpha_plots")
-DIR_CD_ALPHA = os.path.join(RESULTS, "cd_alpha_plots")
-DIR_POLAR    = os.path.join(RESULTS, "polar_plots")
-DIR_XFOIL    = os.path.join(RESULTS, "xfoil_plots")
-DIR_COMPARE  = os.path.join(RESULTS, "comparison_plots")
-DIR_DATA     = os.path.join(RESULTS, "data")
-
-for d in [DIR_AIRFOIL, DIR_INTERPOL, DIR_CP, DIR_CL_ALPHA, DIR_CD_ALPHA,
-          DIR_POLAR, DIR_XFOIL, DIR_COMPARE, DIR_DATA]:
+DIRS = {
+    "airfoil":    os.path.join(RESULTS, "airfoil_plots"),
+    "interpol":   os.path.join(RESULTS, "interpolated_plots"),
+    "cp":         os.path.join(RESULTS, "cp_plots"),
+    "cl_alpha":   os.path.join(RESULTS, "cl_alpha_plots"),
+    "cd_alpha":   os.path.join(RESULTS, "cd_alpha_plots"),
+    "polar":      os.path.join(RESULTS, "polar_plots"),
+    "xfoil":      os.path.join(RESULTS, "xfoil_plots"),
+    "compare":    os.path.join(RESULTS, "comparison_plots"),
+    "data":       os.path.join(RESULTS, "data")
+}
+for d in DIRS.values():
     os.makedirs(d, exist_ok=True)
 
-# === 2) Airfoil geometry & normals ===
+# === A) Variability (max/min) directories ===
+DIR_VAR       = os.path.join(RESULTS, "variability")
+DIR_VAR_MAX   = os.path.join(DIR_VAR, "max")
+DIR_VAR_MIN   = os.path.join(DIR_VAR, "min")
+for base in (DIR_VAR_MAX, DIR_VAR_MIN):
+    for sub in DIRS:
+        os.makedirs(os.path.join(base, os.path.basename(DIRS[sub])), exist_ok=True)
+
+# === 2) Airfoil geometry & surface normal calc ===
 def naca_23012(x):
     t, m, p = 0.12, 0.02, 0.3
     yt = 5*t*(0.2969*np.sqrt(x) - 0.1260*x - 0.3516*x**2 +
@@ -51,18 +57,21 @@ def compute_normals(sensors, x_profile, dy_up, dy_lo):
         normals[num] = np.degrees(np.arctan2(v[1], v[0]))
     return normals
 
-# === 3) Pressure-sweep handling ===
-def load_pressure_data(data_dir="CLDATA", pattern="*_gradi.txt"):
-    data = {}
+# === 3) Load pressure data (avg, max, min) ===
+def load_pressure_data_extremes(data_dir="CLDATA", pattern="*_gradi.txt"):
+    avg_p, max_p, min_p = {}, {}, {}
     for fname in sorted(glob.glob(os.path.join(data_dir, pattern))):
         try:
             α = float(os.path.basename(fname).split("_")[0])
-            arr = np.loadtxt(fname)[:, :16]
-            data[α] = np.mean(arr, axis=0)
-        except:
+            arr = np.loadtxt(fname)[:, :16]   # time × sensors
+            avg_p[α] = arr.mean(axis=0)
+            max_p[α] = arr.max(axis=0)
+            min_p[α] = arr.min(axis=0)
+        except Exception:
             continue
-    return data
+    return avg_p, max_p, min_p
 
+# === 4) Interpolator & Cl from pressure array ===
 def make_interpolators(sensors, avg_p):
     half = len(sensors)//2
     x_up, p_up = sensors[:half,1], avg_p[:half]
@@ -79,195 +88,10 @@ def make_interpolators(sensors, avg_p):
 
     xi = np.linspace(0,1,1000)
     cl = integrate.simpson(cs_lo(xi) - cs_up(xi), xi)
-
     return {"upper": cs_up, "lower": cs_lo}, cl
 
-# === 4) Plot helpers ===
-def plot_airfoil(xp, yu, yl, sensors, normals, avg_p, α):
-    plt.figure(figsize=(8,6))
-    plt.plot(xp, yu, 'b-', xp, yl, 'r-')
-    for i,(num,xs,zs) in enumerate(sensors):
-        slope = np.interp(xs, xp, np.gradient(yu if zs>=0 else yl, xp))
-        v = np.array([-slope,1.0]); v /= np.linalg.norm(v)
-        scale = 0.05*(avg_p[i]/avg_p.mean())
-        plt.arrow(xs, zs, v[0]*scale, v[1]*scale,
-                  head_width=0.1*scale, head_length=0.15*scale,
-                  fc='g', ec='g')
-    plt.gca().set_aspect('equal','box')
-    plt.xlabel("x/c"); plt.ylabel("z/c")
-    plt.title(f"Airfoil + Normals @ {α:.1f}°")
-    plt.savefig(f"{DIR_AIRFOIL}/airfoil_{α:.1f}deg.png", dpi=300)
-    plt.close()
-
-def plot_cp(interps, α):
-    x = np.linspace(0,1,1000)
-    plt.figure(figsize=(6,4))
-    plt.plot(x, interps["upper"](x), 'b-', label='Cp up')
-    plt.plot(x, interps["lower"](x), 'r-', label='Cp lo')
-    plt.gca().invert_yaxis()
-    plt.legend()
-    plt.xlabel("x/c"); plt.ylabel("Cp")
-    plt.title(f"Cp @ {α:.1f}°")
-    plt.savefig(f"{DIR_CP}/cp_{α:.1f}deg.png", dpi=300)
-    plt.close()
-
-def plot_selected_cps(interps, angles):
-    # only keep angles we actually loaded
-    available = sorted(interps.keys())
-    sel = [α for α in angles if α in interps]
-    if not sel:
-        print(f"No Cp data for any of {angles}, available angles are {available}")
-        return
-
-    x = np.linspace(0,1,1000)
-    plt.figure(figsize=(8,5))
-    for α in sel:
-        cs = interps[α]
-        plt.plot(x, cs["upper"](x), '--', label=f'Up {α}°')
-        plt.plot(x, cs["lower"](x), '-',  label=f'Lo {α}°')
-    plt.gca().invert_yaxis()
-    plt.legend(ncol=2, fontsize=8)
-    plt.xlabel("x/c"); plt.ylabel("Cp")
-    plt.title("Cp Comparison")
-    plt.grid(True)
-    plt.savefig(f"{DIR_CP}/selected_angles.png", dpi=300)
-    plt.close()
-
-
-def plot_cl_alpha(alphas, cls):
-    cs = CubicSpline(alphas, cls)
-    af = np.linspace(alphas.min(), alphas.max(), 500)
-    plt.figure(figsize=(6,4))
-    plt.plot(alphas, cls, 'o', af, cs(af), '-')
-    plt.xlabel("α (°)"); plt.ylabel("Cl")
-    plt.title("Cl vs α")
-    plt.grid(True)
-    plt.savefig(f"{DIR_CL_ALPHA}/cl_vs_alpha.png", dpi=300)
-    plt.close()
-
-def plot_cd_alpha(alphas, cds):
-    plt.figure(figsize=(6,4))
-    plt.plot(alphas, cds, 'o-')
-    plt.xlabel("α (°)"); plt.ylabel("Cd")
-    plt.title("Cd vs α (Wake Data)")
-    plt.grid(True)
-    plt.savefig(f"{DIR_CD_ALPHA}/cd_vs_alpha.png", dpi=300)
-    plt.close()
-
-# === 5+6) Polar using only common α values ===
-def plot_matched_polar_and_fits(αs, cls, αw, CDw):
-    # 1) find exact common angles
-    common = np.intersect1d(αs, αw)
-
-    # Check if we have enough data points
-    if len(common) < 4:
-        print(f"Warning: Only {len(common)} common angles found. Need at least 4 for proper fitting.")
-        if len(common) == 0:
-            print("Error: No common angles found. Cannot create polar plots.")
-            return
-
-    Cl_c = np.array([cls[np.where(αs==a)[0][0]] for a in common])
-    Cd_c = np.array([CDw[np.where(αw==a)[0][0]] for a in common])
-
-    # 2) save matched data
-    np.savetxt(os.path.join(DIR_DATA, "polar_matched.csv"),
-               np.column_stack((common, Cl_c, Cd_c)),
-               delimiter=",",
-               header="alpha,Cl,Cd",
-               comments="")
-
-    # 3) plot matched polar
-    plt.figure(figsize=(6,5))
-    plt.plot(Cd_c, Cl_c, 'o-', label='Matched Polar')
-    plt.xlabel("Cd"); plt.ylabel("Cl")
-    plt.title("Matched Polar Curve")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(f"{DIR_POLAR}/cl_vs_cd_matched.png", dpi=300)
-    plt.close()
-
-
-    # === PART 4: Super-Interpolation + Quadratic Fit ===
-    # Sort and deduplicate
-
-
-    # Sort and deduplicate Cl(α)
-    α_cl = sorted(cl_vals.items())
-    αc_arr, Cl_arr = map(np.array, zip(*α_cl))
-    αc_arr, idx_c = np.unique(αc_arr, return_index=True)
-    Cl_arr = Cl_arr[idx_c]
-
-    # Sort and deduplicate Cd(α)
-    α_cd = sorted(zip(αw, CDw))
-    αd_arr, Cd_arr = map(np.array, zip(*α_cd))
-    αd_arr, idx_d = np.unique(αd_arr, return_index=True)
-    Cd_arr = Cd_arr[idx_d]
-
-    # Now define the fine α array within the common range
-    α_min = max(αc_arr.min(), αd_arr.min())
-    α_max = min(αc_arr.max(), αd_arr.max())
-    α_fine = np.linspace(α_min, α_max, 1000)
-
-    # Fit splines Cl(α) and Cd(α)
-    spline_Cl = UnivariateSpline(αc_arr, Cl_arr, s=1e-8)
-    spline_Cd = UnivariateSpline(αd_arr, Cd_arr, s=1e-8)
-
-    # Interpolate Cl and Cd
-    Cl_fine = spline_Cl(α_fine)
-    Cd_fine = spline_Cd(α_fine)
-
-
-
-    # save super-interpolated polar
-    #
-
-
-
-    plt.figure(figsize=(6,5));
-    plt.plot(Cd_fine,Cl_fine,'--',label='Interpolated Polar');
-    plt.xlabel("Cd"); plt.ylabel("Cl")
-    plt.title("Interpolated Polar Curve")
-    plt.grid(True)
-    plt.savefig(f"{DIR_INTERPOL}/interpolated_polar.png", dpi=300);
-    plt.close()
-
-    plt.figure(figsize=(6,5));
-    plt.plot(α_fine,Cd_fine,'--',label='Interpolated CD');
-    plt.xlabel("α"); plt.ylabel("Cd")
-    plt.title("Interpolated CD Curve")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(f"{DIR_INTERPOL}/interpolated_CD.png", dpi=300);
-    plt.close()
-
-    plt.figure(figsize=(6,5))
-    plt.plot(α_fine,Cl_fine,'--',label='Interpolated CL')
-    plt.xlabel("α"); plt.ylabel("Cl")
-    plt.title("Interpolated CL Curve")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(f"{DIR_INTERPOL}/interpolated_CL.png", dpi=300)
-    plt.close()
-
-
-    # quadratic fit on common α
-    common=sorted(set(αc_arr).intersection(αd_arr))
-    Cl_c=np.array([dict(α_cl)[a] for a in common]); Cd_c=np.array([dict(α_cd)[a] for a in common])
-    a,b,c=np.polyfit(Cl_c,Cd_c,2)
-    Cl_fit=np.linspace(Cl_c.min(),Cl_c.max(),500); Cd_fit=a*Cl_fit**2+b*Cl_fit+c
-
-    plt.figure(figsize=(6,5))
-    plt.plot(Cd_c,Cl_c,'ro',label='Data')
-    plt.plot(Cd_fit,Cl_fit,'b--',label=f'Cd={a:.2e}Cl²+{b:.2e}Cl+{c:.2e}')
-    plt.xlabel("Cd"); plt.ylabel("Cl")
-    plt.title("Quadratic Fit of CD vs CL")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(f"{DIR_POLAR}/cl_vs_cd_quad_fit.png", dpi=300)
-    plt.close()
-
-# === 7) Wake-derived drag ===
-def compute_cd_from_wake(data_dir):
+# === 5) Wake‐derived drag ===
+def compute_cd_from_wake(data_dir="CDdata"):
     alphas, CDs = [], []
     for fn in os.listdir(data_dir):
         if not fn.endswith('.txt'): continue
@@ -283,61 +107,282 @@ def compute_cd_from_wake(data_dir):
         alphas.append(α); CDs.append(Dp/CHORD)
     alphas = np.array(alphas); CDs = np.array(CDs)
     idx = np.argsort(alphas)
-    return alphas[idx], CDs[idx], np.polyfit(alphas[idx], CDs[idx], 2)
+    coeffs = np.polyfit(alphas[idx], CDs[idx], 2)
+    return alphas[idx], CDs[idx], coeffs
 
-def save_drag_data(alphas, CDs, coeffs):
-    with open(f"{DIR_DATA}/drag_polar.csv",'w') as f:
-        f.write("alpha_deg,alpha2,CD\n")
-        for α,cd in zip(alphas,CDs):
-            f.write(f"{α:.3f},{α**2:.6f},{cd:.6f}\n")
-    with open(f"{DIR_DATA}/drag_polar_coeffs.txt",'w') as f:
+def save_drag_data(alphas, CDs, coeffs, outdir):
+    # CSV
+    np.savetxt(os.path.join(outdir, "drag_polar.csv"),
+               np.column_stack((alphas, alphas**2, CDs)),
+               delimiter=",",
+               header="alpha_deg,alpha2,CD",
+               comments="")
+    # coeffs
+    with open(os.path.join(outdir, "drag_polar_coeffs.txt"), 'w') as f:
         f.write(f"Cd(α)={coeffs[0]:.6e}·α²+{coeffs[1]:.6e}·α+{coeffs[2]:.6e}\n")
 
-# === 8) XFOIL I/O & plots ===
-def read_xfoil(fname):
-    a_list, cl_list, cd_list = [], [], []
+# === 6) XFOIL I/O & plots ===
+def read_xfoil(fname="rawdata_03.txt"):
+    a, cl, cd = [], [], []
     for L in open(fname):
         ls = L.strip().lower()
-        if not ls or ls.startswith('alpha'):
-            continue
-        a,c1,c2 = map(float, L.split()[:3])
-        a_list.append(a); cl_list.append(c1); cd_list.append(c2)
-    return np.array(a_list), np.array(cl_list), np.array(cd_list)
+        if not ls or ls.startswith('alpha'): continue
+        α,c1,c2 = map(float, L.split()[:3])
+        a.append(α); cl.append(c1); cd.append(c2)
+    return np.array(a), np.array(cl), np.array(cd)
 
-def plot_xfoil(α, cl, cd):
-    plt.figure(figsize=(6,4))
-    plt.plot(α,cl,'o-')
-    plt.xlabel("α"); plt.ylabel("Cl"); plt.title("XFOIL Cl vs α")
-    plt.grid(True); plt.savefig(f"{DIR_XFOIL}/xfoil_cl_alpha.png", dpi=300); plt.close()
-
-    plt.figure(figsize=(6,4))
-    plt.plot(α,cd,'o-')
-    plt.xlabel("α"); plt.ylabel("Cd"); plt.title("XFOIL Cd vs α")
-    plt.grid(True); plt.savefig(f"{DIR_XFOIL}/xfoil_cd_alpha.png", dpi=300); plt.close()
-
-    plt.figure(figsize=(6,4))
-    plt.plot(cd,cl,'o-')
-    plt.xlabel("Cd"); plt.ylabel("Cl"); plt.title("XFOIL Polar")
-    plt.grid(True); plt.savefig(f"{DIR_XFOIL}/xfoil_polar.png", dpi=300); plt.close()
-
-# === 9) Comparison ===
-def compare_exp_xfoil(αe, cle, cde, αx, clx, cdx):
-    me = (αe>=αx.min()) & (αe<=αx.max())
-    mx = (αx>=αe.min()) & (αx<=αe.max())
-    αe, cle, cde = αe[me], cle[me], cde[me]
-    αx, clx, cdx = αx[mx], clx[mx], cdx[mx]
-    fig, axs = plt.subplots(1,3, figsize=(15,4))
-    axs[0].plot(αe, cle,'-', αx, clx,'--'); axs[0].set_title("Cl vs α"); axs[0].grid(True)
-    axs[1].plot(αe, cde,'-', αx, cdx,'--'); axs[1].set_title("Cd vs α"); axs[1].grid(True)
-    axs[2].plot(cde, cle,'-', cdx, clx,'--'); axs[2].set_title("Polar"); axs[2].grid(True)
-    for ax in axs: ax.legend(['Exp','XFOIL'])
-    plt.tight_layout()
-    plt.savefig(f"{DIR_COMPARE}/exp_vs_xfoil.png", dpi=300)
+# === 7) Plot helpers (param: base_outdir) ===
+def plot_airfoil(xp, yu, yl, sensors, normals, avg_p, α, base_out):
+    plt.figure(figsize=(8,6))
+    plt.plot(xp, yu, 'b-', xp, yl, 'r-')
+    for i,(num,xs,zs) in enumerate(sensors):
+        slope = np.interp(xs, xp,
+                          np.gradient(yu if zs>=0 else yl, xp))
+        v = np.array([-slope,1.0]); v /= np.linalg.norm(v)
+        scale = 0.05*(avg_p[i]/avg_p.mean())
+        plt.arrow(xs, zs, v[0]*scale, v[1]*scale,
+                  head_width=0.1*scale, head_length=0.15*scale,
+                  fc='g', ec='g')
+    plt.gca().set_aspect('equal','box')
+    plt.xlabel("x/c"); plt.ylabel("z/c")
+    plt.title(f"Airfoil + Normals @ {α:.1f}°")
+    plt.savefig(os.path.join(base_out, f"airfoil_{α:.1f}deg.png"), dpi=300)
     plt.close()
 
-# === Main workflow ===
+def plot_cp(interps, α, base_out):
+    x = np.linspace(0,1,1000)
+    plt.figure(figsize=(6,4))
+    plt.plot(x, interps["upper"](x), 'b-', label='Cp up')
+    plt.plot(x, interps["lower"](x), 'r-', label='Cp lo')
+    plt.gca().invert_yaxis()
+    plt.legend(); plt.xlabel("x/c"); plt.ylabel("Cp")
+    plt.title(f"Cp @ {α:.1f}°")
+    plt.savefig(os.path.join(base_out, f"cp_{α:.1f}deg.png"), dpi=300)
+    plt.close()
+
+def plot_selected_cps(all_interps, angles, base_out):
+    sel = [α for α in angles if α in all_interps]
+    x = np.linspace(0,1,1000)
+    plt.figure(figsize=(8,5))
+    for α in sel:
+        cs = all_interps[α]
+        plt.plot(x, cs["upper"](x), '--', label=f'Up {α}°')
+        plt.plot(x, cs["lower"](x), '-',  label=f'Lo {α}°')
+    plt.gca().invert_yaxis(); plt.legend(ncol=2, fontsize=8)
+    plt.xlabel("x/c"); plt.ylabel("Cp"); plt.title("Cp Comparison")
+    plt.grid(True)
+    plt.savefig(os.path.join(base_out, "selected_angles.png"), dpi=300)
+    plt.close()
+
+def plot_cl_alpha(alphas, cls, outpath, title="Cl vs α"):
+    cs = CubicSpline(alphas, cls)
+    af = np.linspace(alphas.min(), alphas.max(), 500)
+    plt.figure(figsize=(6,4))
+    plt.plot(alphas, cls, 'o', af, cs(af), '-')
+    plt.xlabel("α (°)"); plt.ylabel("Cl"); plt.title(title)
+    plt.grid(True)
+    plt.savefig(outpath, dpi=300)
+    plt.close()
+
+def plot_cd_alpha(alphas, cds, outpath, title="Cd vs α"):
+    plt.figure(figsize=(6,4))
+    plt.plot(alphas, cds, 'o-')
+    plt.xlabel("α (°)"); plt.ylabel("Cd"); plt.title(title)
+    plt.grid(True)
+    plt.savefig(outpath, dpi=300)
+    plt.close()
+
+def plot_matched_polar_and_fits(αs, cls, αw, CDw, base_polar, base_interpol):
+    common = np.intersect1d(αs, αw)
+    if len(common)<1:
+        print("No common α for polar."); return
+
+    # matched
+    Cl_c = np.array([cls[np.where(αs==a)[0][0]] for a in common])
+    Cd_c = np.array([CDw[np.where(αw==a)[0][0]] for a in common])
+    plt.figure(figsize=(6,5))
+    plt.plot(Cd_c, Cl_c, 'o-', label='Matched Polar')
+    plt.xlabel("Cd"); plt.ylabel("Cl"); plt.title("Matched Polar Curve")
+    plt.legend(); plt.grid(True)
+    plt.savefig(os.path.join(base_polar, "cl_vs_cd_matched.png"), dpi=300)
+    plt.close()
+
+    # super‐interpolation
+    αc_arr, Cl_arr = np.unique(sorted(zip(αs, cls)), axis=0).T
+    αd_arr, Cd_arr = np.unique(sorted(zip(αw, CDw)), axis=0).T
+    α_min, α_max = max(αc_arr.min(), αd_arr.min()), min(αc_arr.max(), αd_arr.max())
+    α_fine = np.linspace(α_min, α_max, 1000)
+    spline_Cl = UnivariateSpline(αc_arr, Cl_arr, s=1e-8)
+    spline_Cd = UnivariateSpline(αd_arr, Cd_arr, s=1e-8)
+    Cl_fine, Cd_fine = spline_Cl(α_fine), spline_Cd(α_fine)
+
+    plt.figure(figsize=(6,5))
+    plt.plot(Cd_fine, Cl_fine, '--', label='Interpolated Polar')
+    plt.xlabel("Cd"); plt.ylabel("Cl"); plt.title("Interpolated Polar Curve")
+    plt.grid(True)
+    plt.savefig(os.path.join(base_interpol, "interpolated_polar.png"), dpi=300)
+    plt.close()
+
+    plt.figure(figsize=(6,5))
+    plt.plot(α_fine, Cd_fine, '--', label='Interpolated CD')
+    plt.xlabel("α"); plt.ylabel("Cd"); plt.title("Interpolated CD Curve")
+    plt.grid(True)
+    plt.savefig(os.path.join(base_interpol, "interpolated_CD.png"), dpi=300)
+    plt.close()
+
+    plt.figure(figsize=(6,5))
+    plt.plot(α_fine, Cl_fine, '--', label='Interpolated CL')
+    plt.xlabel("α"); plt.ylabel("Cl"); plt.title("Interpolated CL Curve")
+    plt.grid(True)
+    plt.savefig(os.path.join(base_interpol, "interpolated_CL.png"), dpi=300)
+    plt.close()
+
+    # quadratic fit
+    common_pts = sorted(set(αc_arr).intersection(αd_arr))
+    Cl_c2 = np.array([dict(zip(αs,cls))[a] for a in common_pts])
+    Cd_c2 = np.array([dict(zip(αw,CDw))[a] for a in common_pts])
+    a,b,c = np.polyfit(Cl_c2, Cd_c2, 2)
+    Cl_fit = np.linspace(Cl_c2.min(), Cl_c2.max(), 500)
+    Cd_fit = a*Cl_fit**2 + b*Cl_fit + c
+
+    plt.figure(figsize=(6,5))
+    plt.plot(Cd_c2, Cl_c2, 'ro', label='Data')
+    plt.plot(Cd_fit, Cl_fit, 'b--',
+             label=f'Cd={a:.2e}Cl²+{b:.2e}Cl+{c:.2e}')
+    plt.xlabel("Cd"); plt.ylabel("Cl"); plt.title("Quadratic Fit of CD vs CL")
+    plt.legend(); plt.grid(True)
+    plt.savefig(os.path.join(base_polar, "cl_vs_cd_quad_fit.png"), dpi=300)
+    plt.close()
+
+def plot_xfoil(αx, clx, cdx, base_out):
+    plt.figure(figsize=(6,4))
+    plt.plot(αx, clx, 'o-')
+    plt.xlabel("α"); plt.ylabel("Cl"); plt.title("XFOIL Cl vs α")
+    plt.grid(True); plt.savefig(os.path.join(base_out, "xfoil_cl_alpha.png"), dpi=300)
+    plt.close()
+
+    plt.figure(figsize=(6,4))
+    plt.plot(αx, cdx, 'o-')
+    plt.xlabel("α"); plt.ylabel("Cd"); plt.title("XFOIL Cd vs α")
+    plt.grid(True); plt.savefig(os.path.join(base_out, "xfoil_cd_alpha.png"), dpi=300)
+    plt.close()
+
+    plt.figure(figsize=(6,4))
+    plt.plot(cdx, clx, 'o-')
+    plt.xlabel("Cd"); plt.ylabel("Cl"); plt.title("XFOIL Polar")
+    plt.grid(True); plt.savefig(os.path.join(base_out, "xfoil_polar.png"), dpi=300)
+    plt.close()
+
+def compare_exp_xfoil(αe, cle, cde, αx, clx, cdx, base_out, qc_exp):
+    """
+    αe,cle,cde : experimental aoa, Cl, Cd
+    αx,clx,cdx : XFOIL    aoa, Cl, Cd
+    qc_exp      : tuple (a,b,c) of experimental Cd vs α quadratic fit
+    """
+    # — 1) Cl vs α (linear, 0 ≤ α ≤ 8) —
+    mask_e = (αe >= 0) & (αe <= 8)
+    mask_x = (αx >= 0) & (αx <= 8)
+    αe_cl, cle_cl = αe[mask_e], cle[mask_e]
+    αx_cl, clx_cl = αx[mask_x], clx[mask_x]
+
+    m1_e, q1_e = np.polyfit(αe_cl, cle_cl, 1)
+    m1_x, q1_x = np.polyfit(αx_cl, clx_cl, 1)
+
+    # — 2) Cd vs α (quadratic formulas only) —
+    a_cd_e, b_cd_e, c_cd_e = qc_exp
+    # compute XFOIL quadratic for Cd vs α:
+    a_cd_x, b_cd_x, c_cd_x = np.polyfit(αx, cdx, 2)
+
+    # — 3) Polar: Cl vs Cd (quadratic formulas only) —
+    # Check if we're using actual data points or values from the quadratic fit
+    if len(αe) == len(cde):  # Actual data points
+        a_p_e, b_p_e, c_p_e = np.polyfit(cle, cde, 2)
+    else:  # Using the quadratic fit values
+        # Calculate coefficients for Cd as a function of Cl using the existing α-based fit
+        a_p_e, b_p_e, c_p_e = None, None, None  # These won't be used
+
+    a_p_x, b_p_x, c_p_x = np.polyfit(clx, cdx, 2)
+
+    # — Plot —
+    fig, axs = plt.subplots(1,3, figsize=(18,5))
+
+    # 1) Cl vs α
+    axs[0].plot(αe_cl, cle_cl, 'o-', label='Exp')
+    axs[0].plot(αx_cl, clx_cl, 's--', label='XFOIL')
+    axs[0].set_title("Cl vs α (0≤α≤8)")
+    axs[0].set_xlabel("α (°)"); axs[0].set_ylabel("Cl")
+    axs[0].grid(True)
+    txt_e = f"Exp: Cl = {m1_e:.3f}·α + {q1_e:.3f}"
+    txt_x = f"XF:  Cl = {m1_x:.3f}·α + {q1_x:.3f}"
+    axs[0].text(0.05, 0.95, txt_e, transform=axs[0].transAxes,
+                va='top', ha='left', fontsize=9,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
+    axs[0].text(0.05, 0.85, txt_x, transform=axs[0].transAxes,
+                va='top', ha='left', fontsize=9,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
+    axs[0].legend()
+
+    # 2) Cd vs α
+    axs[1].plot(αe, cde, 'o-', label='Exp')
+    axs[1].plot(αx, cdx, 's--', label='XFOIL')
+    axs[1].set_title("Cd vs α (quadratic fit)")
+    axs[1].set_xlabel("α (°)"); axs[1].set_ylabel("Cd")
+    axs[1].grid(True)
+    eq_e = f"Exp: Cd = {a_cd_e:.2e}·α² + {b_cd_e:.2e}·α + {c_cd_e:.2e}"
+    eq_x = f"XF:  Cd = {a_cd_x:.2e}·α² + {b_cd_x:.2e}·α + {c_cd_x:.2e}"
+    axs[1].text(0.15, 0.95, eq_e, transform=axs[1].transAxes,
+                va='top', ha='left', fontsize=8,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
+    axs[1].text(0.15, 0.85, eq_x, transform=axs[1].transAxes,
+                va='top', ha='left', fontsize=8,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
+    axs[1].legend()
+
+    # PANEL 3: Cd vs Cl (Cd = f(Cl)), display formula only
+    axs[2].plot(cde, cle, 'o-', label='Exp')
+    axs[2].plot(cdx, clx, 's--', label='XFOIL')
+    axs[2].set_title("Polar: Cd vs Cl (quadratic fit shown only as formula)")
+    axs[2].set_xlabel("Cd")
+    axs[2].set_ylabel("Cl")
+    axs[2].grid(True)
+
+    # Fit Cd = a·Cl² + b·Cl + c (but don't plot it)
+    if len(αe) == len(cde):  # Using actual data points
+        a_p_e, b_p_e, c_p_e = np.polyfit(cle, cde, 2)
+    else:  # Using the quadratic fit - need to convert from α-based to Cl-based
+        # Create synthetic points to fit
+        cl_range = np.linspace(min(cle), max(cle), 100)
+        # Get α values for these Cl values (approximation using linear fit from small angles)
+        approx_α = (cl_range - q1_e) / m1_e
+        # Get Cd values using the quadratic Cd vs α relationship
+        cd_values = a_cd_e * approx_α**2 + b_cd_e * approx_α + c_cd_e
+        a_p_e, b_p_e, c_p_e = np.polyfit(cl_range, cd_values, 2)
+
+    a_p_x, b_p_x, c_p_x = np.polyfit(clx, cdx, 2)
+
+    # Show equations only
+    axs[2].text(0.45, 0.65,
+                f"Exp: Cd = {a_p_e:.2e}·Cl² + {b_p_e:.2e}·Cl + {c_p_e:.2e}",
+                transform=axs[2].transAxes,
+                va='top', ha='left', fontsize=8,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
+    axs[2].text(0.45, 0.55,
+                f"XF:  Cd = {a_p_x:.2e}·Cl² + {b_p_x:.2e}·Cl + {c_p_x:.2e}",
+                transform=axs[2].transAxes,
+                va='top', ha='left', fontsize=8,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
+
+    axs[2].legend()
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(base_out, "exp_vs_xfoil_comparison.png"), dpi=300)
+    plt.close()
+
+
+# === 8) Main workflow ===
 if __name__ == "__main__":
-    # 1) Geometry
+
+    # — Geometry setup —
     xp = np.linspace(0,1,200)
     yu, yl, dy = naca_23012(xp)
     dy_up = np.where(dy>0, dy, 0)
@@ -351,39 +396,85 @@ if __name__ == "__main__":
     ])
     normals = compute_normals(sensors, xp, dy_up, dy_lo)
 
-    # 2) Pressure sweep → Cp & Cl
-    p_data = load_pressure_data()
+    # — 1) Original mean‐based results —
+    avg_data, max_data, min_data = load_pressure_data_extremes()
+
     interps, cl_vals = {}, {}
-    for α, avg_p in p_data.items():
+    for α, avg_p in avg_data.items():
         cs, cl = make_interpolators(sensors, avg_p)
         interps[α], cl_vals[α] = cs, cl
-        plot_airfoil(xp, yu, yl, sensors, normals, avg_p, α)
-        plot_cp(cs, α)
+        plot_airfoil(xp, yu, yl, sensors, normals, avg_p, α, DIRS["airfoil"])
+        plot_cp(cs, α, DIRS["cp"])
 
-    # 3) Cp comparison & Cl vs α
-    plot_selected_cps(interps, [-6,-4,0,4,8])
-    αs = np.array(sorted(cl_vals.keys()))
+    αs = np.array(sorted(cl_vals))
     cls = np.array([cl_vals[a] for a in αs])
-    plot_cl_alpha(αs, cls)
+    plot_selected_cps(interps, [-6,-4,0,4,8], DIRS["cp"])
+    plot_cl_alpha(αs, cls, os.path.join(DIRS["cl_alpha"], "cl_vs_alpha.png"))
 
-    # 4) Wake drag & CD vs α
-    αw, CDw, qc = compute_cd_from_wake("CDdata")
-    save_drag_data(αw, CDw, qc)
-    plot_cd_alpha(αw, CDw)
+    αw, CDw, qc = compute_cd_from_wake()
+    save_drag_data(αw, CDw, qc, DIRS["data"])
+    plot_cd_alpha(αw, CDw, os.path.join(DIRS["cd_alpha"], "cd_vs_alpha.png"))
 
-    # 5+6) Polar and fits using only common α
-    plot_matched_polar_and_fits(αs, cls, αw, CDw)
+    plot_matched_polar_and_fits(αs, cls, αw, CDw, DIRS["polar"], DIRS["interpol"])
+    αx, clx, cdx = read_xfoil()
+    plot_xfoil(αx, clx, cdx, DIRS["xfoil"])
+    # Find common angles between lift and drag data
+    common_angles = np.intersect1d(αs, αw)
+    common_cls = np.array([cl_vals[a] for a in common_angles])
+    common_cds = np.array([CDw[np.where(αw == a)[0][0]] for a in common_angles])
 
-    # 7) XFOIL
-    αx, clx, cdx = read_xfoil("rawdata_03.txt")
-    plot_xfoil(αx, clx, cdx)
+    compare_exp_xfoil(common_angles, common_cls, common_cds, αx, clx, cdx, DIRS["compare"], qc)
 
-    # 8) Comparison Exp vs XFOIL
-    compare_exp_xfoil(αs, cls, np.polyval(qc, αs),
-                      αx, clx, cdx)
-
-    # 9) Save interpolators & Cl
-    with open(os.path.join(DIR_DATA, "interpolators.pkl"), "wb") as f:
+    with open(os.path.join(DIRS["data"], "interpolators.pkl"), "wb") as f:
         pickle.dump({"interps": interps, "cl_vals": cl_vals}, f)
 
-    print("✅ All results saved in the `Results/` directory.")
+    print("✅ Mean‐based results saved under Results/…")
+
+    # — 2) Variability runs (max & min) —
+    for extreme, pdata in (('max', max_data), ('min', min_data)):
+        base_root = DIR_VAR_MAX if extreme=='max' else DIR_VAR_MIN
+
+        # Cp→Cl
+        interps_v, cl_v = {}, {}
+        for α, pvals in pdata.items():
+            cs_v, clv = make_interpolators(sensors, pvals)
+            interps_v[α], cl_v[α] = cs_v, clv
+
+            plot_airfoil(xp, yu, yl, sensors, normals, pvals, α,
+                         os.path.join(base_root, os.path.basename(DIRS["airfoil"])))
+            plot_cp(cs_v, α,
+                    os.path.join(base_root, os.path.basename(DIRS["cp"])))
+
+        αsv = np.array(sorted(cl_v)); clsv = np.array([cl_v[a] for a in αsv])
+        plot_cl_alpha(αsv, clsv,
+                      os.path.join(base_root, os.path.basename(DIRS["cl_alpha"]), f"cl_vs_alpha_{extreme}.png"),
+                      title=f"Cl vs α ({extreme})")
+
+        # Drag
+        save_drag_data(αw, CDw, qc, os.path.join(base_root, os.path.basename(DIRS["data"])))
+        plot_cd_alpha(αw, CDw,
+                      os.path.join(base_root, os.path.basename(DIRS["cd_alpha"]), f"cd_vs_alpha_{extreme}.png"),
+                      title=f"Cd vs α ({extreme})")
+
+        # Polar & interpolation & fits
+        plot_matched_polar_and_fits(αsv, clsv, αw, CDw,
+                                    os.path.join(base_root, os.path.basename(DIRS["polar"])),
+                                    os.path.join(base_root, os.path.basename(DIRS["interpol"])))
+
+        # XFOIL and comparison
+        plot_xfoil(αx, clx, cdx,
+                   os.path.join(base_root, os.path.basename(DIRS["xfoil"])))
+        # Find common angles between variability lift data and original drag data
+        common_angles = np.intersect1d(αsv, αw)
+        common_cls = np.array([cl_v[a] for a in common_angles])
+        common_cds = np.array([CDw[np.where(αw == a)[0][0]] for a in common_angles])
+        compare_exp_xfoil(common_angles, common_cls, common_cds,
+                          αx, clx, cdx,
+                          os.path.join(base_root, os.path.basename(DIRS["compare"])),
+                          qc)
+
+        # save interpolators
+        with open(os.path.join(base_root, os.path.basename(DIRS["data"]), f"interpolators_{extreme}.pkl"), "wb") as f:
+            pickle.dump({"interps": interps_v, "cl_vals": cl_v}, f)
+
+        print(f"✅ {extreme.title()}‐based results saved under {base_root}/…")
