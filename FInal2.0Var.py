@@ -307,9 +307,9 @@ def compare_exp_xfoil(αe, cle, cde, αx, clx, cdx, base_out, qc_exp):
     fig, axs = plt.subplots(1,3, figsize=(18,5))
 
     # 1) Cl vs α
-    axs[0].plot(αe_cl, cle_cl, 'o-', label='Exp')
-    axs[0].plot(αx_cl, clx_cl, 's--', label='XFOIL')
-    axs[0].set_title("Cl vs α (0≤α≤8)")
+    axs[0].plot(αe, cle, 'o-', label='Exp')
+    axs[0].plot(αx, clx, 's--', label='XFOIL')
+    axs[0].set_title("Cl vs α (formula for 0≤α≤8)")
     axs[0].set_xlabel("α (°)"); axs[0].set_ylabel("Cl")
     axs[0].grid(True)
     txt_e = f"Exp: Cl = {m1_e:.3f}·α + {q1_e:.3f}"
