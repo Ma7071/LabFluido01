@@ -285,8 +285,30 @@ def compare_exp_xfoil(αe, cle, cde, αx, clx, cdx, base_out, qc_exp):
     αe_cl, cle_cl = αe[mask_e], cle[mask_e]
     αx_cl, clx_cl = αx[mask_x], clx[mask_x]
 
+    # Calculate linear fit coefficients for Cl vs α (0≤α≤8)
     m1_e, q1_e = np.polyfit(αe_cl, cle_cl, 1)
     m1_x, q1_x = np.polyfit(αx_cl, clx_cl, 1)
+
+    # Save lift curve data with explanations
+    # Determine the correct data directory based on base_out (comparison directory)
+    if base_out.startswith(DIR_VAR_MAX) or base_out.startswith(DIR_VAR_MIN):
+        # We're in variability mode
+        base_dir = os.path.dirname(base_out)  # Go up one level from compare dir
+        data_dir = os.path.join(base_dir, os.path.basename(DIRS["data"]))
+    else:
+        # We're in normal mode
+        data_dir = DIRS["data"]
+
+    with open(os.path.join(data_dir, "lift_curve_coefficients.txt"), 'w') as f:
+        f.write("# Lift Curve Linear Coefficients (Cl = m·α + q) for 0° ≤ α ≤ 8°\n")
+        f.write("# These coefficients represent the linear portion of the lift curve\n")
+        f.write("# where the relationship between lift coefficient (Cl) and angle of attack (α) is linear.\n\n")
+        f.write("# Experimental Data:\n")
+        f.write(f"m_exp = {m1_e:.6f}  # Lift curve slope (per degree)\n")
+        f.write(f"q_exp = {q1_e:.6f}  # Lift coefficient at zero angle of attack\n\n")
+        f.write("# XFOIL Data:\n")
+        f.write(f"m_xfoil = {m1_x:.6f}  # Lift curve slope (per degree)\n")
+        f.write(f"q_xfoil = {q1_x:.6f}  # Lift coefficient at zero angle of attack\n")
 
     # — 2) Cd vs α (quadratic formulas only) —
     a_cd_e, b_cd_e, c_cd_e = qc_exp
@@ -312,8 +334,8 @@ def compare_exp_xfoil(αe, cle, cde, αx, clx, cdx, base_out, qc_exp):
     axs[0].set_title("Cl vs α (formula for 0≤α≤8)")
     axs[0].set_xlabel("α (°)"); axs[0].set_ylabel("Cl")
     axs[0].grid(True)
-    txt_e = f"Exp: Cl = {m1_e:.3f}·α + {q1_e:.3f}"
-    txt_x = f"XF:  Cl = {m1_x:.3f}·α + {q1_x:.3f}"
+    txt_e = f"Exp: Cl = {m1_e:.5f}·α + {q1_e:.5f}"
+    txt_x = f"XF:  Cl = {m1_x:.5f}·α + {q1_x:.5f}"
     axs[0].text(0.05, 0.95, txt_e, transform=axs[0].transAxes,
                 va='top', ha='left', fontsize=9,
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
@@ -430,6 +452,18 @@ if __name__ == "__main__":
 
     print("✅ Mean‐based results saved under Results/…")
 
+    # Store data for min/max comparison
+    mean_data = {
+        'αs': αs,
+        'cls': cls,
+        'αw': αw,
+        'CDw': CDw,
+        'qc': qc
+    }
+
+    # Dictionary to store min/max results
+    extreme_data = {}
+
     # — 2) Variability runs (max & min) —
     for extreme, pdata in (('max', max_data), ('min', min_data)):
         base_root = DIR_VAR_MAX if extreme=='max' else DIR_VAR_MIN
@@ -450,31 +484,206 @@ if __name__ == "__main__":
                       os.path.join(base_root, os.path.basename(DIRS["cl_alpha"]), f"cl_vs_alpha_{extreme}.png"),
                       title=f"Cl vs α ({extreme})")
 
+        # Generate CD values based on extreme pressure values
+        # Calculate the ratio of extreme to average pressure for each angle
+        pressure_ratios = {}
+        for α in αw:
+            if α in avg_data and α in pdata:
+                avg_p = np.mean(avg_data[α])
+                extreme_p = np.mean(pdata[α])
+                pressure_ratios[α] = extreme_p / avg_p
+
+        # Scale the CD values based on the pressure ratios
+        CDw_v = np.copy(CDw)
+        for i, α in enumerate(αw):
+            if α in pressure_ratios:
+                CDw_v[i] *= pressure_ratios[α]
+
+        # Refit the quadratic for the scaled CD values
+        qc_v = np.polyfit(αw, CDw_v, 2)
+
+        # Store results for later comparison
+        extreme_data[extreme] = {
+            'αs': αsv,
+            'cls': clsv,
+            'αw': αw,
+            'CDw': CDw_v,
+            'qc': qc_v
+        }
+
         # Drag
-        save_drag_data(αw, CDw, qc, os.path.join(base_root, os.path.basename(DIRS["data"])))
-        plot_cd_alpha(αw, CDw,
+        save_drag_data(αw, CDw_v, qc_v, os.path.join(base_root, os.path.basename(DIRS["data"])))
+        plot_cd_alpha(αw, CDw_v,
                       os.path.join(base_root, os.path.basename(DIRS["cd_alpha"]), f"cd_vs_alpha_{extreme}.png"),
                       title=f"Cd vs α ({extreme})")
 
         # Polar & interpolation & fits
-        plot_matched_polar_and_fits(αsv, clsv, αw, CDw,
+        plot_matched_polar_and_fits(αsv, clsv, αw, CDw_v,
                                     os.path.join(base_root, os.path.basename(DIRS["polar"])),
                                     os.path.join(base_root, os.path.basename(DIRS["interpol"])))
 
         # XFOIL and comparison
         plot_xfoil(αx, clx, cdx,
                    os.path.join(base_root, os.path.basename(DIRS["xfoil"])))
-        # Find common angles between variability lift data and original drag data
+        # Find common angles between variability lift data and extreme drag data
         common_angles = np.intersect1d(αsv, αw)
         common_cls = np.array([cl_v[a] for a in common_angles])
-        common_cds = np.array([CDw[np.where(αw == a)[0][0]] for a in common_angles])
+        common_cds = np.array([CDw_v[np.where(αw == a)[0][0]] for a in common_angles])
         compare_exp_xfoil(common_angles, common_cls, common_cds,
                           αx, clx, cdx,
                           os.path.join(base_root, os.path.basename(DIRS["compare"])),
-                          qc)
+                          qc_v)
 
         # save interpolators
         with open(os.path.join(base_root, os.path.basename(DIRS["data"]), f"interpolators_{extreme}.pkl"), "wb") as f:
             pickle.dump({"interps": interps_v, "cl_vals": cl_v}, f)
 
         print(f"✅ {extreme.title()}‐based results saved under {base_root}/…")
+        # Create comparison plot of mean, min, and max values
+        # Check if both 'min' and 'max' exist in extreme_data
+        if 'min' in extreme_data and 'max' in extreme_data:
+            # Find common angles across all three datasets
+            common_angles = np.intersect1d(np.intersect1d(mean_data['αs'], extreme_data['min']['αs']),
+                                        extreme_data['max']['αs'])
+
+            # Create arrays for plotting
+            mean_cls = np.array([cl_vals[a] for a in common_angles])
+            min_cls = np.array([extreme_data['min']['cls'][np.where(extreme_data['min']['αs'] == a)[0][0]]
+                                for a in common_angles])
+            max_cls = np.array([extreme_data['max']['cls'][np.where(extreme_data['max']['αs'] == a)[0][0]]
+                                for a in common_angles])
+
+            # Find common angles between lift and drag data for all three cases
+            common_with_drag = np.intersect1d(common_angles, αw)
+            mean_cds = np.array([mean_data['CDw'][np.where(mean_data['αw'] == a)[0][0]] for a in common_with_drag])
+            min_cds = np.array([extreme_data['min']['CDw'][np.where(extreme_data['min']['αw'] == a)[0][0]] for a in common_with_drag])
+            max_cds = np.array([extreme_data['max']['CDw'][np.where(extreme_data['max']['αw'] == a)[0][0]] for a in common_with_drag])
+
+            # Mean, min, max comparison plot
+            fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+
+            # 1) Cl vs α
+            # Calculate percentage differences
+            min_pct_cl = (min_cls - mean_cls) / mean_cls * 100
+            max_pct_cl = (max_cls - mean_cls) / mean_cls * 100
+
+            axs[0].plot(common_angles, mean_cls, 'o-', color='darkblue', linewidth=3, markersize=8, label='Mean (+0.00000%)')
+            axs[0].plot(common_angles, min_cls, 's--', color='forestgreen', linewidth=2.5, markersize=7,
+                        label=f'Min ({min_pct_cl.mean():.5f}%)')
+            axs[0].plot(common_angles, max_cls, '^-', color='crimson', linewidth=2.5, markersize=7,
+                        label=f'Max ({max_pct_cl.mean():.5f}%)')
+            axs[0].set_title("Cl vs α Variability", fontsize=14, fontweight='bold')
+            axs[0].set_xlabel("α (°)", fontsize=12)
+            axs[0].set_ylabel("Cl", fontsize=12)
+            axs[0].grid(True, linestyle='--', alpha=0.7)
+            axs[0].legend(fontsize=10)
+
+            # 2) Cd vs α
+            # Calculate percentage differences
+            min_pct_cd = (min_cds - mean_cds) / mean_cds * 100
+            max_pct_cd = (max_cds - mean_cds) / mean_cds * 100
+
+            axs[1].plot(common_with_drag, mean_cds, 'o-', color='darkblue', linewidth=3, markersize=8, label='Mean (+0.00000%)')
+            axs[1].plot(common_with_drag, min_cds, 's--', color='forestgreen', linewidth=2.5, markersize=7,
+                        label=f'Min ({min_pct_cd.mean():.5f}%)')
+            axs[1].plot(common_with_drag, max_cds, '^-', color='crimson', linewidth=2.5, markersize=7,
+                        label=f'Max ({max_pct_cd.mean():.5f}%)')
+            axs[1].set_title("Cd vs α Variability", fontsize=14, fontweight='bold')
+            axs[1].set_xlabel("α (°)", fontsize=12)
+            axs[1].set_ylabel("Cd", fontsize=12)
+            axs[1].grid(True, linestyle='--', alpha=0.7)
+
+            # Display quadratic fit equations
+            a_mean, b_mean, c_mean = mean_data['qc']
+            eq_mean = f"Mean: Cd = {a_mean:.2e}·α² + {b_mean:.2e}·α + {c_mean:.2e}"
+            axs[1].text(0.05, 0.95, eq_mean, transform=axs[1].transAxes,
+                        va='top', ha='left', fontsize=9,
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.9))
+            axs[1].legend(fontsize=10)
+
+            # 3) Polar: Cl vs Cd
+            common_cls_for_polar = np.array([cl_vals[a] for a in common_with_drag])
+            min_cls_for_polar = np.array([extreme_data['min']['cls'][np.where(extreme_data['min']['αs'] == a)[0][0]]
+                                        for a in common_with_drag])
+            max_cls_for_polar = np.array([extreme_data['max']['cls'][np.where(extreme_data['max']['αs'] == a)[0][0]]
+                                        for a in common_with_drag])
+
+            # Calculate percentage differences for polar plot
+            min_pct_cl_polar = (min_cls_for_polar - common_cls_for_polar) / common_cls_for_polar * 100
+            max_pct_cl_polar = (max_cls_for_polar - common_cls_for_polar) / common_cls_for_polar * 100
+
+            # Calculate combined Cl+Cd values for polar plot
+            mean_combined = common_cls_for_polar + mean_cds
+            min_combined = min_cls_for_polar + min_cds
+            max_combined = max_cls_for_polar + max_cds
+
+            # Calculate percentage differences for combined values
+            min_pct_combined = (min_combined - mean_combined) / mean_combined * 100
+            max_pct_combined = (max_combined - mean_combined) / mean_combined * 100
+
+            axs[2].plot(mean_cds, common_cls_for_polar, 'o-', color='darkblue', linewidth=3, markersize=8,
+                        label='Mean (+0.00000%)')
+            axs[2].plot(min_cds, min_cls_for_polar, 's--', color='forestgreen', linewidth=2.5, markersize=7,
+                        label=f'Min ({min_pct_combined.mean():.5f}%)')
+            axs[2].plot(max_cds, max_cls_for_polar, '^-', color='crimson', linewidth=2.5, markersize=7,
+                        label=f'Max ({max_pct_combined.mean():.5f}%)')
+            axs[2].set_title("Polar: Cl vs Cd Variability", fontsize=14, fontweight='bold')
+            axs[2].set_xlabel("Cd", fontsize=12)
+            axs[2].set_ylabel("Cl", fontsize=12)
+            axs[2].grid(True, linestyle='--', alpha=0.7)
+            axs[2].legend(fontsize=10)
+
+            plt.tight_layout()
+            plt.savefig(os.path.join(DIRS["compare"], "mean_min_max_comparison.png"), dpi=300)
+            plt.close()
+
+            # Save percentage difference data
+            with open(os.path.join(DIRS["data"], "variability_analysis.txt"), 'w') as f:
+                f.write("# Variability Analysis Results\n")
+                f.write("# This file contains the percentage differences between min/max and mean values\n\n")
+
+                f.write("# 1. Cl vs α Variability\n")
+                f.write("# These values represent how much the lift coefficient varies from the mean at each angle of attack\n")
+                f.write(f"Mean min percentage difference: {min_pct_cl.mean():.5f}%\n")
+                f.write(f"Mean max percentage difference: {max_pct_cl.mean():.5f}%\n")
+                f.write(f"Maximum min percentage difference: {np.abs(min_pct_cl).max():.5f}%\n")
+                f.write(f"Maximum max percentage difference: {np.abs(max_pct_cl).max():.5f}%\n\n")
+
+                f.write("# 2. Cd vs α Variability\n")
+                f.write("# These values represent how much the drag coefficient varies from the mean at each angle of attack\n")
+                f.write(f"Mean min percentage difference: {min_pct_cd.mean():.5f}%\n")
+                f.write(f"Mean max percentage difference: {max_pct_cd.mean():.5f}%\n")
+                f.write(f"Maximum min percentage difference: {np.abs(min_pct_cd).max():.5f}%\n")
+                f.write(f"Maximum max percentage difference: {np.abs(max_pct_cd).max():.5f}%\n\n")
+
+                f.write("# 3. Polar (Cl+Cd) Variability\n")
+                f.write("# These values represent how much the combined aerodynamic coefficients (Cl+Cd) vary from the mean\n")
+                f.write("# This is calculated as the percentage difference in the sum of Cl and Cd at each point\n")
+                f.write(f"Mean min percentage difference: {min_pct_combined.mean():.5f}%\n")
+                f.write(f"Mean max percentage difference: {max_pct_combined.mean():.5f}%\n")
+                f.write(f"Maximum min percentage difference: {np.abs(min_pct_combined).max():.5f}%\n")
+                f.write(f"Maximum max percentage difference: {np.abs(max_pct_combined).max():.5f}%\n\n")
+
+                f.write("# Detailed data for each angle of attack:\n")
+                f.write("alpha,mean_cl,min_cl,max_cl,mean_cd,min_cd,max_cd,mean_combined,min_combined,max_combined\n")
+                for i, alpha in enumerate(common_with_drag):
+                    f.write(f"{alpha:.2f},{common_cls_for_polar[i]:.6f},{min_cls_for_polar[i]:.6f},{max_cls_for_polar[i]:.6f},")
+                    f.write(f"{mean_cds[i]:.6f},{min_cds[i]:.6f},{max_cds[i]:.6f},")
+                    f.write(f"{mean_combined[i]:.6f},{min_combined[i]:.6f},{max_combined[i]:.6f}\n")
+
+            # Save CSV format for easier analysis
+            np.savetxt(os.path.join(DIRS["data"], "variability_data.csv"),
+                    np.column_stack((
+                        common_with_drag,
+                        common_cls_for_polar, min_cls_for_polar, max_cls_for_polar,
+                        mean_cds, min_cds, max_cds,
+                        mean_combined, min_combined, max_combined
+                    )),
+                    delimiter=",",
+                    header="alpha,mean_cl,min_cl,max_cl,mean_cd,min_cd,max_cd,mean_combined,min_combined,max_combined",
+                    comments="")
+
+            print("✅ Mean-Min-Max comparison plot saved under Results/comparison_plots/")
+            print("✅ Variability analysis data saved under Results/data/")
+        else:
+            print("⚠️ Skipping Mean-Min-Max comparison: both 'min' and 'max' data required.")

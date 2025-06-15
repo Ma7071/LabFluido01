@@ -1,0 +1,11 @@
+# Lift Curve Linear Coefficients (Cl = m·α + q) for 0° ≤ α ≤ 8°
+# These coefficients represent the linear portion of the lift curve
+# where the relationship between lift coefficient (Cl) and angle of attack (α) is linear.
+
+# Experimental Data:
+m_exp = 0.079322  # Lift curve slope (per degree)
+q_exp = 0.348382  # Lift coefficient at zero angle of attack
+
+# XFOIL Data:
+m_xfoil = 0.090340  # Lift curve slope (per degree)
+q_xfoil = 0.270851  # Lift coefficient at zero angle of attack

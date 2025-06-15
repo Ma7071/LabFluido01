@@ -1,0 +1,35 @@
+# Variability Analysis Results
+# This file contains the percentage differences between min/max and mean values
+
+# 1. Cl vs α Variability
+# These values represent how much the lift coefficient varies from the mean at each angle of attack
+Mean min percentage difference: 0.37160%
+Mean max percentage difference: -0.79013%
+Maximum min percentage difference: 2.39126%
+Maximum max percentage difference: 13.53394%
+
+# 2. Cd vs α Variability
+# These values represent how much the drag coefficient varies from the mean at each angle of attack
+Mean min percentage difference: 0.20202%
+Mean max percentage difference: -0.21425%
+Maximum min percentage difference: 0.29209%
+Maximum max percentage difference: 0.31827%
+
+# 3. Polar (Cl+Cd) Variability
+# These values represent how much the combined aerodynamic coefficients (Cl+Cd) vary from the mean
+# This is calculated as the percentage difference in the sum of Cl and Cd at each point
+Mean min percentage difference: 0.20297%
+Mean max percentage difference: -0.57729%
+Maximum min percentage difference: 0.91569%
+Maximum max percentage difference: 4.24424%
+
+# Detailed data for each angle of attack:
+alpha,mean_cl,min_cl,max_cl,mean_cd,min_cd,max_cd,mean_combined,min_combined,max_combined
+-4.00,-0.265711,-0.265584,-0.266401,0.023950,0.024012,0.023882,-0.241761,-0.241572,-0.242519
+-2.00,0.005744,0.005882,0.004967,0.013592,0.013632,0.013549,0.019337,0.019514,0.018516
+0.00,0.348631,0.350403,0.346572,0.008409,0.008426,0.008395,0.357041,0.358829,0.354967
+2.00,0.478430,0.478493,0.478518,0.019247,0.019272,0.019206,0.497677,0.497765,0.497724
+4.00,0.699122,0.699770,0.698761,0.021428,0.021478,0.021390,0.720550,0.721247,0.720151
+6.00,0.842195,0.842887,0.841877,0.026056,0.026097,0.026016,0.868251,0.868984,0.867893
+8.00,0.959969,0.960474,0.959914,0.038393,0.038484,0.038303,0.998362,0.998958,0.998217
+10.00,1.002804,1.003031,1.002841,0.054553,0.054614,0.054461,1.057357,1.057645,1.057302
