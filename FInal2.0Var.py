@@ -2,7 +2,7 @@
 import os, glob, pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.interpolate import CubicSpline, UnivariateSpline
+from scipy.interpolate import CubicSpline, UnivariateSpline, make_interp_spline
 from scipy import integrate
 
 # === 0) Constants ===
@@ -133,20 +133,48 @@ def read_xfoil(fname="rawdata_03.txt"):
 
 # === 7) Plot helpers (param: base_outdir) ===
 def plot_airfoil(xp, yu, yl, sensors, normals, avg_p, α, base_out):
-    plt.figure(figsize=(8,6))
-    plt.plot(xp, yu, 'b-', xp, yl, 'r-')
-    for i,(num,xs,zs) in enumerate(sensors):
-        slope = np.interp(xs, xp,
-                          np.gradient(yu if zs>=0 else yl, xp))
-        v = np.array([-slope,1.0]); v /= np.linalg.norm(v)
-        scale = 0.05*(avg_p[i]/avg_p.mean())
-        plt.arrow(xs, zs, v[0]*scale, v[1]*scale,
-                  head_width=0.1*scale, head_length=0.15*scale,
-                  fc='g', ec='g')
-    plt.gca().set_aspect('equal','box')
-    plt.xlabel("x/c"); plt.ylabel("z/c")
+    plt.figure(figsize=(8, 6))
+
+    # Plot airfoil shape
+    plt.plot(xp, yu, 'b-', label='Upper Surface')
+    plt.plot(xp, yl, 'r-', label='Lower Surface')
+
+    # Plot pressure normals using annotate for proper arrowheads
+    for i, (num, xs, zs) in enumerate(sensors):
+        # Determine which surface we're on and compute slope
+        surface = yu if zs >= 0 else yl
+        slope = np.interp(xs, xp, np.gradient(surface, xp))
+
+        # Compute normal vector and normalize it
+        v = np.array([-slope, 1.0])
+        v /= np.linalg.norm(v)
+
+        # Scale arrow length based on relative pressure
+        scale = 0.05 * (avg_p[i] / avg_p.mean())
+        dx, dy = v[0] * scale, v[1] * scale
+
+        # Draw arrow with head exactly at tip using annotate
+        plt.annotate(
+            "",
+            xy=(xs + dx, zs + dy),     # arrow tip
+            xytext=(xs, zs),           # arrow base
+            arrowprops=dict(
+                arrowstyle="->",
+                color="g",
+                lw=1.0,
+                shrinkA=0,
+                shrinkB=0
+            )
+        )
+
+    # Labels and formatting
+    plt.gca().set_aspect('equal', 'box')
+    plt.xlabel("x/c")
+    plt.ylabel("z/c")
     plt.title(f"Airfoil + Normals @ {α:.1f}°")
-    plt.savefig(os.path.join(base_out, f"airfoil_{α:.1f}deg.png"), dpi=300)
+    plt.legend()
+    out_path = os.path.join(base_out, f"airfoil_{α:.1f}deg.png")
+    plt.savefig(out_path, dpi=300)
     plt.close()
 
 def plot_cp(interps, α, base_out):
@@ -185,10 +213,25 @@ def plot_cl_alpha(alphas, cls, outpath, title="Cl vs α"):
     plt.close()
 
 def plot_cd_alpha(alphas, cds, outpath, title="Cd vs α"):
-    plt.figure(figsize=(6,4))
-    plt.plot(alphas, cds, 'o-')
-    plt.xlabel("α (°)"); plt.ylabel("Cd"); plt.title(title)
+    # Ensure alphas are sorted (required for interpolation)
+    sorted_indices = np.argsort(alphas)
+    alphas_sorted = alphas[sorted_indices]
+    cds_sorted = cds[sorted_indices]
+
+    # Create quadratic spline (k=2)
+    spline = make_interp_spline(alphas_sorted, cds_sorted, k=2)
+    alpha_smooth = np.linspace(alphas_sorted[0], alphas_sorted[-1], 300)
+    cd_smooth = spline(alpha_smooth)
+
+    # Plot
+    plt.figure(figsize=(6, 4))
+    plt.plot(alpha_smooth, cd_smooth, color='darkorange', label="Quadratic Fit")
+    plt.plot(alphas, cds, 'o', color='darkcyan', label="Data Points")
+    plt.xlabel("α (°)")
+    plt.ylabel("Cd")
+    plt.title(title)
     plt.grid(True)
+    plt.legend()
     plt.savefig(outpath, dpi=300)
     plt.close()
 
