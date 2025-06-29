@@ -23,6 +23,7 @@ This repository contains a Python-based workflow for airfoil pressure-sweep anal
 * **XFOIL I/O**: Reads XFOIL raw data and plots Cl vs. α, Cd vs. α, and polar curve.
 * **Experimental vs. XFOIL**: Generates comparative plots of Cl, Cd, and polar curves.
 * **Variability analysis**: Redo alla calculation using minimum and maximum values of raw experimental data.
+* **Uncertainty Analysis**: Performs uncertainty propagation analysis on the calculated coefficients.
 
 ---
 

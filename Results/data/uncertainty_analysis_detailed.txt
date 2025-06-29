@@ -1,0 +1,101 @@
+# Detailed Uncertainty Analysis
+# Uncertainties calculated from raw data time series for each coefficient
+
+# 1. Cl Uncertainty by Angle of Attack (All Available Angles)
+# Calculated from standard deviation of Cl values computed from each time sample
+Alpha -10.0°: Cl uncertainty = -0.150%
+Alpha -9.0°: Cl uncertainty = -0.073%
+Alpha -8.5°: Cl uncertainty = -0.053%
+Alpha -8.0°: Cl uncertainty = -0.091%
+Alpha -7.0°: Cl uncertainty = -0.035%
+Alpha -6.0°: Cl uncertainty = -0.073%
+Alpha -4.0°: Cl uncertainty = -0.408%
+Alpha -2.0°: Cl uncertainty = 20.965%
+Alpha 0.0°: Cl uncertainty = 0.506%
+Alpha 2.0°: Cl uncertainty = 0.056%
+Alpha 4.0°: Cl uncertainty = 0.099%
+Alpha 6.0°: Cl uncertainty = 0.063%
+Alpha 7.0°: Cl uncertainty = 0.086%
+Alpha 8.0°: Cl uncertainty = 0.077%
+Alpha 9.0°: Cl uncertainty = 0.047%
+Alpha 9.5°: Cl uncertainty = 0.067%
+Alpha 10.0°: Cl uncertainty = 0.037%
+Alpha 10.5°: Cl uncertainty = 0.032%
+Alpha 11.0°: Cl uncertainty = 1.536%
+Alpha 12.0°: Cl uncertainty = 1.554%
+Alpha 13.0°: Cl uncertainty = 0.506%
+Alpha 14.0°: Cl uncertainty = 0.313%
+
+Average Cl uncertainty (all angles): 1.139%
+
+# 2. Cd Uncertainty by Angle of Attack
+# Estimated from pressure variability (proxy for wake uncertainty)
+Alpha -4.0°: Cd uncertainty = -0.036%
+Alpha -2.0°: Cd uncertainty = -0.025%
+Alpha 0.0°: Cd uncertainty = -0.048%
+Alpha 2.0°: Cd uncertainty = -0.080%
+Alpha 4.0°: Cd uncertainty = -0.072%
+Alpha 6.0°: Cd uncertainty = -0.078%
+Alpha 8.0°: Cd uncertainty = -0.095%
+Alpha 10.0°: Cd uncertainty = -0.090%
+
+Average Cd uncertainty: -0.066%
+
+# 3. Combined Cl+Cd Uncertainty
+# Root sum of squares of individual uncertainties
+Alpha -4.0°: Combined uncertainty = 0.410%
+Alpha -2.0°: Combined uncertainty = 20.965%
+Alpha 0.0°: Combined uncertainty = 0.509%
+Alpha 2.0°: Combined uncertainty = 0.097%
+Alpha 4.0°: Combined uncertainty = 0.122%
+Alpha 6.0°: Combined uncertainty = 0.100%
+Alpha 8.0°: Combined uncertainty = 0.122%
+Alpha 10.0°: Combined uncertainty = 0.098%
+
+Average combined uncertainty: 2.803%
+
+# 4. Final Aerodynamic Coefficients with Uncertainties
+# Format: Alpha: Coefficient ± Uncertainty
+# Cl values calculated from pressure integration (All Available Angles)
+Alpha -10.0°: Cl = -0.676005 ± 0.001012
+Alpha -9.0°: Cl = -0.638965 ± 0.000464
+Alpha -8.5°: Cl = -0.608939 ± 0.000325
+Alpha -8.0°: Cl = -0.554070 ± 0.000502
+Alpha -7.0°: Cl = -0.515175 ± 0.000181
+Alpha -6.0°: Cl = -0.453791 ± 0.000333
+Alpha -4.0°: Cl = -0.265711 ± 0.001085
+Alpha -2.0°: Cl = 0.005744 ± 0.001204
+Alpha 0.0°: Cl = 0.348631 ± 0.001765
+Alpha 2.0°: Cl = 0.478430 ± 0.000267
+Alpha 4.0°: Cl = 0.699122 ± 0.000689
+Alpha 6.0°: Cl = 0.842195 ± 0.000529
+Alpha 7.0°: Cl = 0.892157 ± 0.000767
+Alpha 8.0°: Cl = 0.959969 ± 0.000736
+Alpha 9.0°: Cl = 0.981281 ± 0.000457
+Alpha 9.5°: Cl = 0.995603 ± 0.000664
+Alpha 10.0°: Cl = 1.002804 ± 0.000373
+Alpha 10.5°: Cl = 0.992254 ± 0.000315
+Alpha 11.0°: Cl = 0.741329 ± 0.011387
+Alpha 12.0°: Cl = 0.579383 ± 0.009005
+Alpha 13.0°: Cl = 0.623626 ± 0.003155
+Alpha 14.0°: Cl = 0.637268 ± 0.001996
+
+# Cd values from wake measurements
+Alpha -4.0°: Cd = 0.023950 ± -0.000009
+Alpha -2.0°: Cd = 0.013592 ± -0.000003
+Alpha 0.0°: Cd = 0.008409 ± -0.000004
+Alpha 2.0°: Cd = 0.019247 ± -0.000015
+Alpha 4.0°: Cd = 0.021428 ± -0.000015
+Alpha 6.0°: Cd = 0.026056 ± -0.000020
+Alpha 8.0°: Cd = 0.038393 ± -0.000036
+Alpha 10.0°: Cd = 0.054553 ± -0.000049
+
+# Combined Cl+Cd values with uncertainties
+Alpha -4.0°: Cl+Cd = -0.241761 ± -0.000991
+Alpha -2.0°: Cl+Cd = 0.019337 ± 0.004054
+Alpha 0.0°: Cl+Cd = 0.357041 ± 0.001816
+Alpha 2.0°: Cl+Cd = 0.497677 ± 0.000484
+Alpha 4.0°: Cl+Cd = 0.720550 ± 0.000880
+Alpha 6.0°: Cl+Cd = 0.868251 ± 0.000868
+Alpha 8.0°: Cl+Cd = 0.998362 ± 0.001219
+Alpha 10.0°: Cl+Cd = 1.057357 ± 0.001031
